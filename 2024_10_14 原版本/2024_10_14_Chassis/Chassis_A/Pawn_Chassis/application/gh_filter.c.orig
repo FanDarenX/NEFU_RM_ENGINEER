@@ -1,0 +1,75 @@
+#include "gh_filter.h"
+#include "string.h"
+#include "user_lib.h"
+#include "ins_task.h"
+#include "gimbal_task.h"
+
+#define ABS(x) (((x) > 0) ? (x) : (-(x)))
+
+_GH_Filter_Struct RB_Zaccel;
+
+void g_h_fliter(float data,_GH_Filter_Struct* gh_param)
+{
+    float x_pred;
+    float residual;
+
+//    if(gh_param->i == 0)
+//    {
+//        gh_param->x_est = gh_param->x0;
+//        gh_param->i = 1;
+//    }
+
+    //预测
+    x_pred = gh_param->x_est + ( gh_param->dx * gh_param->dt );
+
+    //更新
+    residual = data - x_pred;
+    gh_param->dx  = gh_param->dx + gh_param->h * ( residual / gh_param->dt );
+    gh_param->x_est = x_pred + gh_param->g * residual;
+
+    gh_param->x_now=gh_param->x_est;
+}
+
+void gh_Zaccel_init(void)
+{
+    memset(&RB_Zaccel,0,sizeof(RB_Zaccel));
+    RB_Zaccel.dt = 0.001;
+    RB_Zaccel.g  = 0.01;
+    RB_Zaccel.h  = 0.005;
+}
+
+float obv_zaccel[2] = {0,0};
+
+void gh_Zaccel_update(void)
+{	
+	g_h_fliter(INS.Accel[2],&RB_Zaccel);
+	// 变量观测
+	obv_zaccel[0] = INS.Accel[2];
+	obv_zaccel[1] = RB_Zaccel.x_now;
+}
+
+float dynamic_feed_adj(void)
+{
+float accel = RB_Zaccel.x_now;
+float F_feed = 0;
+if(chassis_control.stand_ready == 0x02)
+{
+	if(chassis_control.chassis_rc_ctrl->sit_flag == 1)
+	{
+	F_feed = 0; 
+	}
+	else if(ABS(accel - 9.8)< 0.1)// 正常状态
+	{
+		F_feed = 80;
+	}
+
+
+
+}
+else
+{
+	F_feed = 0;
+
+}
+return F_feed;
+}

@@ -1,0 +1,39 @@
+#ifndef GH_FILTER_H
+#define GH_FILTER_H
+
+
+typedef struct
+{
+//    uint8_t i;
+    float x0;     //初始值
+    float dx;     //预测增量
+    float g;      //g参数
+    float h;      //h参数
+    float dt;     //步长
+    float x_est;  //上次值 
+    float x_now;
+}_GH_Filter_Struct;
+
+void g_h_fliter(int data,_GH_Filter_Struct* gh_param)
+{
+    float x_pred;
+    float residual;
+
+//    if(gh_param->i == 0)
+//    {
+//        gh_param->x_est = gh_param->x0;
+//        gh_param->i = 1;
+//    }
+
+    //预测
+    x_pred = gh_param->x_est + ( gh_param->dx * gh_param->dt );
+
+    //更新
+    residual = data - x_pred;
+    gh_param->dx  = gh_param->dx + gh_param->h * ( residual / gh_param->dt );
+    gh_param->x_est = x_pred + gh_param->g * residual;
+
+    gh_param->x_now=gh_param->x_est;
+}
+
+#endif

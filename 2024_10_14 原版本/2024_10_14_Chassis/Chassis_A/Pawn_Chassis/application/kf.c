@@ -1,0 +1,191 @@
+/**
+  ************************************* Copyright ******************************
+  *
+  *                 (C) Copyright {2022},ZQJ,China, Ares.
+  *                            All Rights Reserved
+  *
+  ******************************************************************************
+  *
+  * FileName   : kf.c
+  * Version    : v1.0
+  * Author     : ZQJ
+  * Date       : 2023-07-21
+  * Description: X轴运动的匀加速直线运动卡尔曼滤波
+  *
+  ******************************************************************************
+  */
+
+/* Includes ------------------------------------------------------------------*/
+
+
+#include "kf.h"
+
+#define dt 0.001
+
+/*
+x/z = | position  |
+	   	| veclocity |
+
+*/
+
+////
+//float A[2][2] = {{1,dt},
+//                 {0,1}};
+//// B
+//float B[2][1] = {{0.5*dt*dt}
+//											,{dt}};
+
+//// H 只观测了速度
+//float H[1][2] = {0,1};
+
+//// Q
+//float Q[2][2] = {{0.1,0},
+//								 {0,0.1}};
+
+//// R
+//float R[1][1] = {0.5};
+
+//// P_init
+
+/* 有点麻烦 这样计算 */
+//void KF_Update(float *x,float *P,float u,float z)
+//{
+////预测步骤
+//// 1.预测状态
+//float x_hat[2];
+//x_hat[0] = A[0][0]*x[0]+A[0][1]*x[1]+B[0][0]*u;
+//x_hat[1] = A[1][0]*x[0]+A[1][1]*x[1]+B[1][0]*u;
+
+//// 2.预测协方差矩阵
+//float P_hat[2][2];
+//P_hat[0][0] = A[0][0]*P[0]+A[0][1]*P[2]+Q[0][0];
+//P_hat[0][1] = A[0][0]*P[1]+A[0][1]*P[3]+Q[0][1];
+//P_hat[1][0] = A[1][0]*P[0]+A[1][1]*P[2]+Q[1][0];
+//P_hat[1][1] = A[1][0]*P[1]+A[1][1]+P[3]+Q[1][1];
+//
+////更新步骤
+//// 1.计算卡尔曼增益
+//float K[2][1];
+//K[0][0] = P_hat[0][0]*H[0][0]/(H[0][0]*P_hat[0][0]+R[0][0]);
+//K[1][0] = P_hat[1][0]*H[0][0]/(H[0][0]*P_hat[0][0]+R[0][0]);
+
+//// 2.更新状态
+//x[0] = x_hat[0] + K[0][0]*(z-H[0][0])
+
+//}
+
+//KalFil_t xsport;
+
+KalmanFilter_t xsport;
+
+void SPORT_KF_INIT(void)
+{
+
+//    static float A[4] = {1,dt,
+//                         0,1
+//                        };
+//    static float B[2] = {0.5*dt*dt,
+//                         1
+//                        };
+//    static float H[4] = {1,0,0,1};
+//    static float Q[4] = {0.1,0,
+//                         0,0.1
+//                        };
+//    static float R = 0.5;
+//    static float P_init[4] = {1,0,
+//                              0,1
+//                             };
+
+//    mat_init(&init->A,2,2,(float *)A);
+//    mat_init(&init->B,2,1,(float *)B);
+
+    static float P_Init[4] =
+    {
+        10,0,
+        0,10
+    };
+    static float F_Init[4] =
+    {
+        1,dt,
+        0,1
+    };
+    static float Q_Init[4] =
+    {
+        0.1,0,
+        0,0.1
+    };
+
+    static float B_init[2] =
+    {
+        0.5*dt*dt,
+        dt
+    };
+    // 设置最小方差
+    static float state_min_variance[2] = {0.1, 0.1};
+
+    // 开启自动调整
+    xsport.UseAutoAdjustment = 1;
+
+    // 里程计测距离 电机反馈速度
+    static uint8_t measurement_reference[2] = {1, 2};
+
+    static float measurement_degree[2] = {1, 1};
+    // 根据measurement_reference与measurement_degree生成H矩阵如下（在当前周期全部测量数据有效情况下）
+//        |1   0|
+//        |0   1|
+
+    static float mat_R_diagonal_elements[2] = {0.1, 50};
+    //根据mat_R_diagonal_elements生成R矩阵如下（在当前周期全部测量数据有效情况下）
+//        |0.1  0 |
+//        | 0  10 |
+
+    // 矩阵初始化
+    Kalman_Filter_Init(&xsport, 2, 1, 2);
+
+    // 设置矩阵值
+    memcpy(xsport.P_data, P_Init, sizeof(P_Init));
+    memcpy(xsport.F_data, F_Init, sizeof(F_Init));
+    memcpy(xsport.Q_data, Q_Init, sizeof(Q_Init));
+    memcpy(xsport.B_data, B_init, sizeof(B_init));
+    memcpy(xsport.MeasurementMap, measurement_reference, sizeof(measurement_reference));
+    memcpy(xsport.MeasurementDegree, measurement_degree, sizeof(measurement_degree));
+    memcpy(xsport.MatR_DiagonalElements, mat_R_diagonal_elements, sizeof(mat_R_diagonal_elements));
+    memcpy(xsport.StateMinVariance, state_min_variance, sizeof(state_min_variance));
+}
+
+
+
+// 测量数据更新应按照以下形式 即向MeasuredVector赋值
+void Measure_UPDATE(void)
+{
+    // x v update
+    xsport.MeasuredVector[0] = chassis_control.chassis_balance.foot_distance;
+    xsport.MeasuredVector[1] = chassis_control.chassis_balance.foot_speed;
+    // u update
+    if(chassis_control.stand_ready == 0x02) // 匀加速直线
+    {
+        xsport.ControlVector[0] = INS.Accel[0];
+    }
+    else // 匀速直线
+    {
+        xsport.ControlVector[0] = 0;
+    }
+}
+
+// xsport_KF_update
+float pre_x,pre_v;
+float fed_x,fed_v;
+void SPORT_KF_UPDATE(void)
+{
+    Measure_UPDATE();
+    Kalman_Filter_Update(&xsport);
+    // 变量观测 单从debug来看是有用的，具体看看波形
+    pre_x = xsport.xhat_data[0];
+    pre_v = xsport.xhat_data[1];
+    fed_x = chassis_control.chassis_balance.foot_distance;
+    fed_v = chassis_control.chassis_balance.foot_speed;
+}
+
+
+/************************ (C) COPYRIGHT ZQJ *****END OF FILE****/
+

@@ -1,0 +1,520 @@
+#include "shoot.h"
+#include "main.h"
+#include "referee.h"
+#include "cmsis_os.h"
+#include "arm_math.h"
+#include "user_lib.h"
+#include "CAN_receive.h"
+#include "gimbal_task.h"
+#include "pid.h"
+#include "bsp_filter.h"
+#include "tim.h"
+#include "decet_task.h"
+/********************************************************************/
+#define LimitMax(input, max)   \
+    {                          \
+        if (input > max)       \
+        {                      \
+            input = max;       \
+        }                      \
+        else if (input < -max) \
+        {                      \
+            input = -max;      \
+        }                      \
+    }
+		
+		#define ABS(x) (((x) > 0) ? (x) : (-(x)))
+shoot_control_t shoot_control;          //射击数据
+int8_t shoot_flag=0;
+Lead_Lag_t Lead_Lag_fire;
+fp32 bullet_speed[10]={14.0f};
+uint16_t fire_speed[4]={SPEED_15,SPEED_18,SPEED_22,SPEED_30};
+//                 K1   K2      K3   KP      KI
+fp32 shoot_lqr[5]={0.0f,1500.0f,0.0f,1000.0f,0.0f};
+fp32 barrel_lqr[5]={0.0f,100.0f,0.0f,500.0f,0.0f};
+fp32 trigger_pid[3];
+uint8_t barrel_choice_flag=1;//1是1号 2是2号 
+uint8_t barrel_ready_flag=1;//到位置以后置1
+static uint8_t fire_ready_flag=0;//待击发flag
+/********************************************************************/
+static void shoot_feedback_update(void);
+void shoot_control_loop(void);
+void magazine_cover_control(void);
+void barrel_choice(void);
+int16_t barrel_PI_LQR(fp32 KP,fp32 KI,fp32 K1,fp32 K2,fp32 K3,//PI_LQR Serise
+										  fp32 angle_get,fp32 speed_get,fp32 current_get,
+									    fp32 angle_set);
+//int16_t gimbal_LQR(fp32 K1,fp32 K2,fp32 K0,fp32 angle_get,fp32 speed_get,fp32 angle_set,fp32 speed_set);
+int16_t shoot_PI_LQR(fp32 KP,fp32 KI,fp32 K1,fp32 K2,fp32 K3,//PI_LQR Serise
+										  fp32 angle_get,fp32 speed_get,fp32 current_get,
+									    fp32 angle_set);
+/*****************************************************************/
+void shoot_init(void)
+{
+    static const fp32 Trigger_speed_pid[3] = {TRIGGER_SPEED_PID_KP, TRIGGER_SPEED_PID_KI, TRIGGER_SPEED_PID_KD};
+		static const fp32 Trigger_angle_pid[3] = {TRIGGER_ANGLE_PID_KP, TRIGGER_ANGLE_PID_KI, TRIGGER_ANGLE_PID_KD};
+		static const fp32 Fire1_speed_pid[3]    = {FIRE1_SPEED_PID_KP, FIRE1_SPEED_PID_KI, FIRE1_SPEED_PID_KD};
+		static const fp32 Fire2_speed_pid[3]    = {FIRE2_SPEED_PID_KP, FIRE2_SPEED_PID_KI, FIRE2_SPEED_PID_KD};
+		static const fp32 Barrel_speed_pid[3]   = {BARREL_SPEED_PID_KP, BARREL_SPEED_PID_KI, BARREL_SPEED_PID_KD};
+    shoot_control.shoot_mode = SHOOT_STOP;
+    //遥控器指针
+    shoot_control.shoot_rc = get_remote_control_point();
+    //拨弹轮指针
+		shoot_control.fire_motor1_measure = get_6020motor_measure_point(0);
+		shoot_control.fire_motor2_measure = get_6020motor_measure_point(1);
+		shoot_control.shoot_motor_measure = get_6020motor_measure_point(2);
+		shoot_control.barrel_motor_measure = get_6020motor_measure_point(5);
+		//初始化PID
+    PID_init(&shoot_control.trigger_motor_pid,  PID_POSITION, Trigger_speed_pid, TRIGGER_BULLET_PID_MAX_OUT, TRIGGER_BULLET_PID_MAX_IOUT);
+		PID_init(&shoot_control.fire1_motor_pid,    PID_DELTA, Fire1_speed_pid,    FIRE_BULLET_PID_MAX_OUT,    FIRE_BULLET_PID_MAX_IOUT);
+		PID_init(&shoot_control.fire2_motor_pid,    PID_DELTA, Fire2_speed_pid,    FIRE_BULLET_PID_MAX_OUT,    FIRE_BULLET_PID_MAX_IOUT);
+		PID_init(&shoot_control.trigger_angle_motor_pid,    PID_POSITION, Trigger_angle_pid,TRIGGER_ANGLE_PID_MAX_OUT,TRIGGER_ANGLE_PID_MAX_IOUT);
+		PID_init(&shoot_control.barrel_motor_pid,   PID_DELTA, Barrel_speed_pid,BARREL_PID_MAX_OUT,BARREL_PID_MAX_IOUT);
+    //更新数据
+    shoot_feedback_update();
+
+    shoot_control.ecd_count       = 0;
+    shoot_control.angle           = shoot_control.shoot_motor_measure->ecd * MOTOR_ECD_TO_ANGLE;
+    shoot_control.set_angle       = shoot_control.angle;
+    shoot_control.trigger_speed_set = 0.0f;
+		shoot_control.fire_speed1_set = 0;
+		shoot_control.fire_speed2_set = 0;
+		shoot_control.ecd_count       = 0;
+		shoot_control.barrel_speed_set = 8000;
+}
+	static fp32 now_speed=0,last_speed=0;
+void bullet_speed_get()
+{
+	static uint16_t speed_limite=0;
+	fp32 speed_temp=0;
+	int16_t speed_sum=0;
+	last_speed=now_speed;
+	now_speed=RM_Referee.shoot_data_t.bullet_speed;
+	if(speed_limite!=RM_Referee.robot_state.shooter_id1_17mm_speed_limit)
+	{
+  	for(uint8_t i=0;i<10;i++)//射速设定改变以后重设速度
+		{
+			if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==15)
+			bullet_speed[i]=13.5f;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==18)
+			bullet_speed[i]=17.0f;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==22)
+			bullet_speed[i]=22.0f;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit>=30)
+			bullet_speed[i]=29.0f;
+		}
+	}
+	speed_limite=RM_Referee.robot_state.shooter_id1_17mm_speed_limit;
+	
+		if(last_speed!=now_speed)
+		{//射速浮动小于百分之十以内为正常范围
+				for(uint8_t i=1;i<10;i++)
+				{
+					bullet_speed[i-1]=bullet_speed[i];//数组向前递推一位
+				}
+				bullet_speed[9]=now_speed;
+			if(ABS((now_speed-shoot_control.bullet_speed)/shoot_control.bullet_speed)<=0.2f)
+				bullet_speed[9]=now_speed;//射速在一定范围内时计入递推
+			else
+				bullet_speed[9]=shoot_control.bullet_speed;//大于百分之二十时大概率是擦枪管或者出别的问题了
+			
+			fire_ready_flag=0;
+		}
+		
+	for(uint8_t i=0;i<10;i++)
+	{speed_sum+=(int16_t)(bullet_speed[i]*10);}
+	shoot_control.bullet_speed = speed_sum*0.01f;
+}
+/********************控热量*************************/
+static int shoot_heat_control(void)
+{ 
+	int flag;
+	shoot_control.shooter_heat_limit = RM_Referee.robot_state.shooter_id1_17mm_cooling_limit;
+	
+	if(barrel_choice_flag==1&&barrel_ready_flag==1)//面对步兵，左边那个是1号
+	{
+		if(RM_Referee.power_heat_data_t.shooter_heat0 > shoot_control.shooter_heat_limit-12.0f)
+		{
+			flag=0;
+		}
+		else if(RM_Referee.power_heat_data_t.shooter_heat0 > shoot_control.shooter_heat_limit-25.0f)
+		{
+		flag=1;
+		}
+		else
+		{
+			flag=2;
+		}
+	}
+	else if(barrel_choice_flag==2&&barrel_ready_flag==1)//右边是二号
+		{
+		if(RM_Referee.power_heat_data_t.shooter_heat1 > shoot_control.shooter_heat_limit-12.0f)
+		{
+			flag=0;
+		}
+		else if(RM_Referee.power_heat_data_t.shooter_heat1 > shoot_control.shooter_heat_limit-25.0f)
+		{
+		flag=1;
+		}
+		else
+		{
+			flag=2;
+		}
+	}
+	return flag;
+}
+int8_t change_flag=0;
+/***************************模式选择********************************/
+static void shoot_set_mode(void)
+{		
+	static int16_t num=0,error_num=0,wait_mun=0,change_num=0,barrel_ready_num=0;
+		if(fire_ready_flag==2)error_num++;
+	  else if(fire_ready_flag==0)error_num=0;
+		if(error_num>=550)fire_ready_flag=0;
+	  shoot_control.last_trigger_mode=shoot_control.trigger_mode;
+//**********************************************************************//
+//if (shoot_heat_control()==0)
+//{	
+//	if((barrel_choice_flag==1&&RM_Referee.power_heat_data_t.shooter_heat1 < 70.0f)||
+//						 (barrel_choice_flag==2&&RM_Referee.power_heat_data_t.shooter_heat0 < 70.0f))
+//	 {
+//		 if(barrel_ready_num<150)barrel_ready_num++;
+//		 else 
+//		 {
+//			barrel_ready_num=0;//barrel_ready_flag=0;
+//			shoot_control.set_angle=shoot_control.angle;
+//		 }
+//	 }
+//}
+/*****************************************************************/
+		if(change_num<500)change_num++;
+		else
+		{
+			if(rc_ctrl.key.v &KEY_PRESSED_OFFSET_G && change_flag==0)
+			{
+			change_num=0;change_flag=1;
+			if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==15)			fire_speed[0]=4150-200;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==18)fire_speed[1]=4650-200;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==22)fire_speed[2]=6000-200;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit>=25)fire_speed[3]=7100-200;
+			}
+			else if(rc_ctrl.key.v &KEY_PRESSED_OFFSET_G && change_flag==1)
+			{
+			change_num=0;change_flag=0;
+			if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==15)			fire_speed[0]=4150;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==18)fire_speed[1]=4650;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==22)fire_speed[2]=6000;
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit>=25)fire_speed[3]=7100;
+			}
+		}
+	
+		if(switch_is_mid(rc_ctrl.rc.s[1])==1||(test_flag==1)||switch_is_up(rc_ctrl.rc.s[1])==1)
+		{
+			shoot_control.shoot_mode = SHOOT_READY;
+			
+			if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==15)
+			{
+			 shoot_control.fire_speed1_set =fire_speed[0];
+			 shoot_control.fire_speed2_set =-fire_speed[0];}
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==18)
+			{
+			 shoot_control.fire_speed1_set =fire_speed[1];
+			 shoot_control.fire_speed2_set =-fire_speed[1];}
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit==22)
+			{
+			 shoot_control.fire_speed1_set =fire_speed[2];
+			 shoot_control.fire_speed2_set =-fire_speed[2];}
+			else if(RM_Referee.robot_state.shooter_id1_17mm_speed_limit>=25)
+			{
+			shoot_control.fire_speed1_set =fire_speed[3];
+			 shoot_control.fire_speed2_set =-fire_speed[3];}
+		}
+		else if(switch_is_mid(rc_ctrl.rc.s[1])==0)
+		{ 
+			shoot_control.shoot_mode = SHOOT_STOP;
+			shoot_control.fire_speed1_set=0;
+		  shoot_control.fire_speed2_set=0;
+		}
+		
+ 	 if((switch_is_mid(rc_ctrl.rc.s[1]))||(switch_is_up(rc_ctrl.rc.s[1])))//当拨杆位于中间or test
+		{
+			if((Pawn_mode==2||Pawn_mode==3)&&rc_ctrl.key.v &KEY_PRESSED_OFFSET_E)
+			{//为大小幅模式收尾时
+				if (shoot_heat_control()==0)
+				 {num=0;
+					fire_ready_flag=0;
+				}
+				else 
+				{
+					if(num<100)num++;//热量低的时候低射频
+					else
+					{
+					if((fire_ready_flag==0)&&((rc_ctrl.mouse.press_l==1||test_flag==1)||
+						((switch_is_mid(rc_ctrl.rc.s[1]))&&(switch_is_up(rc_ctrl.rc.s[0])))
+					
+					))
+					{ fire_ready_flag=1;num=0;}
+					}  
+				}
+			}
+			else if((Pawn_mode==2||Pawn_mode==3)||rc_ctrl.key.v &KEY_PRESSED_OFFSET_E)
+			{
+				if (shoot_heat_control()==0)
+				 {num=0;
+					fire_ready_flag=0;
+				}
+				else 
+				{
+					if(num<500)num++;//热量低的时候低射频
+					else
+					{
+					if((fire_ready_flag==0)&&((rc_ctrl.mouse.press_l==1||test_flag==1)||
+						((switch_is_mid(rc_ctrl.rc.s[1]))&&(switch_is_up(rc_ctrl.rc.s[0])))
+					
+					))
+					{ fire_ready_flag=1;num=0;}
+					}  
+				}
+			}
+			else 
+			{//为普通模式时
+				if (shoot_heat_control()==0)
+				 {num=0;
+					fire_ready_flag=0;
+				}
+				else if(shoot_heat_control()==1)
+				{
+					if(num<250)num++;//热量低的时候低射频
+					else
+					{
+					if((fire_ready_flag==0)&&(rc_ctrl.mouse.press_l==1||test_flag==1))
+					{ fire_ready_flag=1;num=0;}
+					}  
+				}
+				else if(shoot_heat_control()==2)
+				{
+					if(num<100)num++;//热量足的时候高射频
+					else
+					{
+					if((fire_ready_flag==0)&&(rc_ctrl.mouse.press_l==1||test_flag==1))
+					{ fire_ready_flag=1;num=0;}
+					}  
+				}	
+			}
+			/****************************************************************************/
+			if(fire_ready_flag==1)//按下左键 待击发为1 拨杆在中间
+			{
+				if(error_num>=550)
+				{	
+		  	fire_ready_flag=3;
+				shoot_control.set_angle-=15.0f;	
+				error_num=0;}
+				else
+				{
+				if(rc_ctrl.key.v &KEY_PRESSED_OFFSET_F)shoot_control.set_angle-=45.0f*(shoot_control.shooter_heat_limit-RM_Referee.power_heat_data_t.shooter_heat0);	
+				else shoot_control.set_angle-=45.0f;	
+		  	fire_ready_flag=2;
+				}
+			}
+
+	}
+		if(fire_ready_flag==3)
+		{
+			if(wait_mun<500)wait_mun++;
+			else 
+			{fire_ready_flag=4;wait_mun=0;}
+		}
+		if(fire_ready_flag==4)
+		{
+			if(wait_mun<200)wait_mun++;
+			else 
+			{fire_ready_flag=0;wait_mun=0;}
+		}
+
+}
+/***************************数据更新***********************************/
+float fix_ecd;
+float fix_last_ecd;
+float barrel_ecd;
+float barrel_last_ecd;
+static void shoot_feedback_update(void)
+{
+	static uint8_t fire_temp_last;
+	uint8_t fire_temp;
+	
+	  shoot_control.trigger_current = shoot_control.shoot_motor_measure->given_current*0.01f;
+    shoot_control.trigger_speed = shoot_control.shoot_motor_measure->speed_rpm;
+		shoot_control.fire_speed1   = shoot_control.fire_motor1_measure->speed_rpm;
+    shoot_control.fire_speed2   = shoot_control.fire_motor2_measure->speed_rpm;
+	
+	  shoot_control.barrel_speed   = shoot_control.barrel_motor_measure->speed_rpm;
+    shoot_control.barrel_current   = shoot_control.barrel_motor_measure->given_current;
+	/**************************************************************/
+	fix_ecd      =(float)shoot_control.shoot_motor_measure->ecd;
+	fix_last_ecd =(float)shoot_control.shoot_motor_measure->last_ecd;
+	shoot_control.ecd_count=fix_ecd-fix_last_ecd;
+	shoot_control.fire1_temperate = shoot_control.fire_motor1_measure->temperate;
+	shoot_control.fire2_temperate = shoot_control.fire_motor2_measure->temperate;
+	if(switch_is_mid(rc_ctrl.rc.s[1])||test_flag)
+	{
+		if(shoot_control.ecd_count>(0.5*8192))
+		{
+			shoot_control.ecd_count-=8192;
+		}
+		else if(shoot_control.ecd_count<(-0.5*8192))
+		{
+			shoot_control.ecd_count+=8192;
+		}
+		shoot_control.angle+=((fp32)shoot_control.ecd_count/8192)*10;
+	}
+	/**************************************************************/
+	barrel_ecd      =(float)shoot_control.barrel_motor_measure->ecd;
+	barrel_last_ecd =(float)shoot_control.barrel_motor_measure->last_ecd;
+	shoot_control.barrel_count=barrel_ecd-barrel_last_ecd;
+	
+		if(shoot_control.barrel_count>(0.5*8192))
+		{
+			shoot_control.barrel_count-=8192;
+		}
+		else if(shoot_control.barrel_count<(-0.5*8192))
+		{
+			shoot_control.barrel_count+=8192;
+		}
+		shoot_control.barrel_angle+=((fp32)shoot_control.barrel_count/8192)*10;
+	/**************************************************************/
+
+	fire_temp_last = fire_temp;
+	fire_temp = decet_flag.motor_state[2];
+	if(fire_temp_last==0&&fire_temp==1)
+		shoot_control.set_angle = shoot_control.angle;
+	
+	if(shoot_control.set_angle > shoot_control.angle)shoot_control.set_angle = shoot_control.angle;
+//		if(shoot_control.set_angle < shoot_control.angle-120)shoot_control.set_angle = shoot_control.angle;
+}
+
+
+/************************************射击进程******************************************/
+fp32 PID_calc_fire(pid_type_def *pid, fp32 ref, fp32 set);
+void shoot_control_loop(void)
+{ 	
+  	shoot_feedback_update();
+	  barrel_choice();
+	  bullet_speed_get();
+	  shoot_set_mode();
+	  magazine_cover_control();
+		shoot_control.fire1_current   =  PID_calc(&shoot_control.fire1_motor_pid, shoot_control.fire_speed1,  shoot_control.fire_speed1_set);
+		shoot_control.fire2_current   =  PID_calc(&shoot_control.fire2_motor_pid, shoot_control.fire_speed2,  shoot_control.fire_speed2_set);
+		if(barrel_ready_flag==0)
+		{
+		shoot_control.barrel_given_current  =  PID_calc(&shoot_control.barrel_motor_pid, shoot_control.barrel_speed,  shoot_control.barrel_speed_set );
+		if(switch_is_down(rc_ctrl.rc.s[1]))
+		{shoot_control.trigger_current = 0;}
+		else if(switch_is_mid(rc_ctrl.rc.s[1])||(test_flag==1))
+		{
+			shoot_control.trigger_current=shoot_PI_LQR(shoot_lqr[3],shoot_lqr[4],shoot_lqr[0],shoot_lqr[1],shoot_lqr[2],
+		 shoot_control.angle,
+		 shoot_control.trigger_speed*0.00291f,
+		 shoot_control.trigger_current,
+		 shoot_control.set_angle);}
+		}
+		else
+		{
+			shoot_control.barrel_given_current =barrel_PI_LQR(barrel_lqr[3],barrel_lqr[4],barrel_lqr[0],barrel_lqr[1],barrel_lqr[2],
+																					 shoot_control.barrel_angle,
+																					 shoot_control.barrel_speed*0.00291f,
+																					 shoot_control.barrel_current,
+																					 shoot_control.barrel_angle_set);
+		if(switch_is_down(rc_ctrl.rc.s[1]))
+		{shoot_control.trigger_current = 0;}
+		else if(switch_is_mid(rc_ctrl.rc.s[1])||(test_flag==1))
+		{
+			if(fire_ready_flag==4)
+			{shoot_control.trigger_current   =  PID_calc(&shoot_control.trigger_motor_pid, shoot_control.trigger_speed,  1080);}
+			else
+			{shoot_control.trigger_current=shoot_PI_LQR(shoot_lqr[3],shoot_lqr[4],shoot_lqr[0],shoot_lqr[1],shoot_lqr[2],
+								   shoot_control.angle,
+									 shoot_control.trigger_speed*0.00291f,
+									 shoot_control.trigger_current,
+									 shoot_control.set_angle);}
+		}
+		}
+		
+	 
+}
+//切换枪管过程与判定
+void barrel_choice()
+{
+//	static uint16_t num=0;
+//	if(barrel_ready_flag==0)//切换标志位为0，则开始转动
+//	{
+//		if(barrel_choice_flag==1)                               shoot_control.barrel_speed_set = 8000;
+//		else if(barrel_choice_flag==2||barrel_choice_flag==0)		shoot_control.barrel_speed_set = -8000;
+//		if(ABS(shoot_control.barrel_current)>CURRENT_LIMIT &&ABS(shoot_control.shoot_motor_measure->speed_rpm<ANGLE_DELAT))
+//		{
+//			if(num<200)num++;//到位置以后等0.2s
+//			else
+//			{
+//				num=0;barrel_ready_flag=1;
+//				shoot_control.barrel_angle_set=shoot_control.barrel_angle;//切换结束，设置当前角度为保持角度
+//				if(barrel_choice_flag==1)    barrel_choice_flag=2;
+//    		else if(barrel_choice_flag==2||barrel_choice_flag==0)	barrel_choice_flag=1;
+//			}
+//		}
+//		else
+//		{num=0;}//若为到位置则计数清零
+//	}
+}
+
+uint8_t mc_num=0,mc_flag=0;
+void magazine_cover_control()
+{
+	if(mc_num<=200)
+		mc_num++;
+	else if(mc_num>200&&(mc_flag==1&&(rc_ctrl.key.v & KEY_PRESSED_OFFSET_Z ||(switch_is_down(rc_ctrl.rc.s[1])&&(switch_is_up(rc_ctrl.rc.s[0]))))))
+	{
+	__HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,1000);//750 1750
+		mc_num=0;
+		mc_flag=0;
+	}
+	else if(mc_num>200&&mc_flag==0&&(rc_ctrl.key.v & KEY_PRESSED_OFFSET_X ||(switch_is_mid(rc_ctrl.rc.s[1])&&(switch_is_up(rc_ctrl.rc.s[0])))))
+	{
+	__HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,2000);//750 1750
+		mc_flag=1;
+		mc_num=0;
+	}
+//	
+}	
+
+int16_t shoot_PI_LQR(fp32 KP,fp32 KI,fp32 K1,fp32 K2,fp32 K3,//PI_LQR Serise
+										  fp32 angle_get,fp32 speed_get,fp32 current_get,
+									    fp32 angle_set)
+{
+	fp32 current=0,first_out=0;
+	fp32 KP_angle;
+	static fp32 KI_angle=0;
+	KP_angle=(angle_set-angle_get);
+	KI_angle+=(angle_set-angle_get);
+	abs_limit(&KI_angle,2.0f);
+	first_out = KP*KP_angle+KI*KI_angle;
+	
+	current=(first_out - (K2*speed_get + K3*(-current_get)));//通过角度和速度求出理论要求输入的角加速度
+	abs_limit(&current,8000.0f);
+	return (int16_t)current;
+}
+int16_t barrel_PI_LQR(fp32 KP,fp32 KI,fp32 K1,fp32 K2,fp32 K3,//PI_LQR Serise
+										  fp32 angle_get,fp32 speed_get,fp32 current_get,
+									    fp32 angle_set)
+{
+	fp32 current=0,first_out=0;
+	fp32 KP_angle;
+	static fp32 KI_angle=0;
+	KP_angle=(angle_set-angle_get);
+	KI_angle+=(angle_set-angle_get);
+	abs_limit(&KI_angle,2.0f);
+	first_out = KP*KP_angle+KI*KI_angle;
+	
+	current=(first_out - (K2*speed_get + K3*(-current_get)));//通过角度和速度求出理论要求输入的角加速度
+	abs_limit(&current,4000.0f);
+	return (int16_t)current;
+}
+

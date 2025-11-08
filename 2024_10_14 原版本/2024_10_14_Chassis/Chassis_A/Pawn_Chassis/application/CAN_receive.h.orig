@@ -1,0 +1,174 @@
+/**
+  ****************************(C) COPYRIGHT 2019 DJI****************************
+  * @file       can_receive.c/h
+  * @brief      there is CAN interrupt function  to receive motor data,
+  *             and CAN send function to send motor current to control motor.
+  *             这里是CAN中断接收函数，接收电机数据,CAN发送函数发送电机电流控制电机.
+  * @note
+  * @history
+  *  Version    Date            Author          Modification
+  *  V1.0.0     Dec-26-2018     RM              1. done
+  *
+  @verbatim
+  ==============================================================================
+
+  ==============================================================================
+  @endverbatim
+  ****************************(C) COPYRIGHT 2019 DJI****************************
+  */
+
+#ifndef CAN_RECEIVE_H
+#define CAN_RECEIVE_H
+
+#include "struct_typedef.h"
+
+#define CHASSIS_CAN hcan1
+#define GIMBAL_CAN hcan2
+#define CANNON_CAN hcan1
+#define CMD_MOTOR_MODE      0x01
+#define CMD_RESET_MODE      0x02
+#define CMD_ZERO_POSITION   0x03
+
+#define HT_SLAVE_ID1        0x01
+#define HT_SLAVE_ID3        0x03
+#define CAN_SLAVE_ID        0x200
+#define CAN_GIMBAL_ID       0x307
+#define CAN_SUPERCAP_ID     0x309
+#define CAN_CHASSIS_ID      0x308
+
+#define P_MIN -95.5f    // Radians
+#define P_MAX 95.5f
+#define V_MIN -45.0f    // Rad/s
+#define V_MAX 45.0f
+#define KP_MIN 0.0f     // N-m/rad
+#define KP_MAX 500.0f
+#define KD_MIN 0.0f     // N-m/rad/s
+#define KD_MAX 5.0f
+#define T_MIN -18.0f
+#define T_MAX 18.0f
+/* CAN send and receive ID */
+typedef enum
+{
+    CAN_SEND_TO_CAP_ID = 0X208,
+    CAN_INS_TO_CAP_ID = 0X308,
+
+    CAN_CHASSIS_ALL_ID = 0x140,
+    CAN_9025_M1_ID = 0x141,
+    CAN_9025_M2_ID = 0x143,
+
+    CAN_GIMBAL_YAW_ID = 0x2FF,
+    CAN_YAW_MOTOR_ID = 0x209,
+} can_msg_id_e;
+
+//rm motor data
+typedef struct
+{
+    uint16_t ecd;
+    int16_t speed_rpm;
+    int16_t given_current;
+    int8_t temperate;
+    uint16_t last_ecd;
+    uint16_t delta_ecd;
+    int16_t round;
+}   motor_measure_t;
+
+typedef struct
+{
+    volatile fp32 ecd;
+    volatile fp32 speed_rpm;
+    volatile fp32 last_ecd;
+    int16_t round;
+}   HT_motor_measure_t;
+
+
+
+typedef struct
+{
+    fp32 Value_Bat;
+    fp32 Value_Cap;
+    fp32 Power_Charge;
+    fp32 Power_Chassis;
+} cap_measure_t;
+
+typedef struct
+{
+    fp32 X_speed;//基础速度2m/s，运动模式下3m/s+
+    fp32 Y_speed;
+    uint8_t sport_flag;
+    uint8_t sit_flag;//蹲下，小板凳模式  //当前腿长，基础0.18、蹲下0.11、起立0.27
+    uint8_t stand_flag;//起身，中门对狙
+    uint8_t mode_R;
+    uint8_t tl_flag;//侧对敌，你觉得你能-杀-死-我！
+    uint8_t side_flag;//侧对敌，叹息之墙
+    uint8_t power_flag;//功率上限
+    uint16_t energy_buff;//缓冲功率
+		uint8_t A1_motor_reset;
+} Gimbal_ctrl_t;
+
+/**
+  * @brief          send control current of motor (0x205, 0x206, 0x207, 0x208)
+  * @param[in]      yaw: (0x205) 6020 motor control current, range [-30000,30000]
+  * @param[in]      pitch: (0x206) 6020 motor control current, range [-30000,30000]
+  * @param[in]      shoot: (0x207) 2006 motor control current, range [-10000,10000]
+  * @param[in]      rev: (0x208) reserve motor control current
+  * @retval         none
+  */
+/**
+  * @brief          发送电机控制电流(0x205,0x206,0x207,0x208)
+  * @param[in]      yaw: (0x205) 6020电机控制电流, 范围 [-30000,30000]
+  * @param[in]      pitch: (0x206) 6020电机控制电流, 范围 [-30000,30000]
+  * @param[in]      shoot: (0x207) 2006电机控制电流, 范围 [-10000,10000]
+  * @param[in]      rev: (0x208) 保留，电机控制电流
+  * @retval         none
+  */
+extern void CAN_cmd_yaw_gimbal(int16_t yaw);
+void CAN_cmd_pitch_gimbal(int16_t pitch,int16_t barrel);
+/**
+  * @brief          send CAN packet of ID 0x700, it will set chassis motor 3508 to quick ID setting
+  * @param[in]      none
+  * @retval         none
+  */
+/**
+  * @brief          发送ID为0x700的CAN包,它会设置3508电机进入快速设置ID
+  * @param[in]      none
+  * @retval         none
+  */
+extern void CAN_cmd_chassis_reset_ID(void);
+
+/**
+  * @brief          send control current of motor (0x201, 0x202, 0x203, 0x204)
+  * @param[in]      motor1: (0x201) 3508 motor control current, range [-16384,16384]
+  * @param[in]      motor2: (0x202) 3508 motor control current, range [-16384,16384]
+  * @param[in]      motor3: (0x203) 3508 motor control current, range [-16384,16384]
+  * @param[in]      motor4: (0x204) 3508 motor control current, range [-16384,16384]
+  * @retval         none
+  */
+/**
+  * @brief          发送电机控制电流(0x201,0x202,0x203,0x204)
+  * @param[in]      motor1: (0x201) 3508电机控制电流, 范围 [-16384,16384]
+  * @param[in]      motor2: (0x202) 3508电机控制电流, 范围 [-16384,16384]
+  * @param[in]      motor3: (0x203) 3508电机控制电流, 范围 [-16384,16384]
+  * @param[in]      motor4: (0x204) 3508电机控制电流, 范围 [-16384,16384]
+  * @retval         none
+  */
+	
+extern void CAN_cmd_chassis(int16_t motor1, int16_t motor2, int16_t motor3, int16_t motor4);
+extern void CAN_cmd_chassis_yaw(int16_t yaw);
+void CAN_cmd_cannon(int16_t shoot, int16_t pitch,int16_t fire1, int16_t fire2);
+extern void CAN_cmd_cap_flag(int8_t x_flag,int8_t y_flag,int8_t tl_flag,int8_t sp_flag,int8_t mode,uint8_t buffer_energy,uint16_t power_limit);
+extern const motor_measure_t *get_6020motor_measure_point(uint8_t i);
+extern const motor_measure_t *get_2006motor_measure_point(uint8_t i);
+extern const motor_measure_t *get_3508motor_measure_point(uint8_t i);
+extern const motor_measure_t *get_9025motor_measure_point(uint8_t i);
+extern const HT_motor_measure_t *get_HT_motor_measure_point(uint8_t i);
+extern void CAN_cmd_cap_angle(fp32 INS_pitch,fp32 INS_roll,fp32 INS_yaw,fp32 motor_pitch,fp32 motor_yaw);
+extern void CAN_cmd_barrel(int16_t barrel);
+extern cap_measure_t   super_cap;
+extern Gimbal_ctrl_t Gimbal_ctrl;
+extern void CanComm_ControlCmd(uint8_t cmd,uint8_t id);
+extern void CanComm_SendControlPara(float f_p, float f_v, float f_kp, float f_kd, float f_t,uint8_t id);
+extern void CAN_cmd_chassis_read(uint8_t id,int16_t current);
+extern void CAN_cmd_9025(int16_t current1,int16_t current2);
+extern const Gimbal_ctrl_t *get_Gimabl_control_point(void);
+extern const cap_measure_t *get_SuperCap_control_point(void);
+#endif

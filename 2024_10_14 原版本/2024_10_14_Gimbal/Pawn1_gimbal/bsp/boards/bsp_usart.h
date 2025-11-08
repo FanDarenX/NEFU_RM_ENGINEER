@@ -1,0 +1,68 @@
+#ifndef BSP_USART_H
+#define BSP_USART_H
+#include "struct_typedef.h"
+#include "usart.h"
+#include "gimbal_task.h"
+#define PC_HUART      huart1
+extern	bool_t PC_update_flag;
+extern	bool_t PC_flag;
+
+
+#define PTZ_HUART      huart1
+extern uint8_t usart_state ;
+extern uint8_t PC_Buf[PC_BUF_LEN];
+typedef enum
+{
+//	rune_dema	='a',	//大符标定    0x61
+//	rune_mode 	='d',	//大符模式  0x64
+//	assist_mode	='c',	//辅助瞄准  0x63
+//	nomal_mode	=0,	//普通模式
+//	rune_big_mode='e',//大符
+//	nomal='z'
+	Remote_mode ='r',
+	Huang_mode ='h',
+	SmallBuff_mode   ='b',
+	BIGBuff_mode ='a',
+	Tuoluo_mode ='t',
+	Kill_mode ='k',
+}Command;
+
+typedef struct
+{
+	int16_t pitch;
+	int16_t yaw;
+	int16_t buffpitch;
+	int16_t buffyaw;
+	uint8_t flag_shoot;
+	uint8_t shoot;
+	uint8_t num_shoot;//大符下打出的子弹数
+	float  distance;
+	int16_t gray;
+	char BaoGuang;
+}_PCDATA;
+
+extern _PCDATA Pc_Data;
+#define HEAD_LEN    4
+#define ON  1
+#define OFF 0
+
+#define PC_HUART      huart1
+#define PC_BUF_LEN    50
+
+HAL_StatusTypeDef Bsp_UART_Receive_DMA(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t Size);
+HAL_StatusTypeDef Bsp_UART_Receive_IT(UART_HandleTypeDef *huart, uint8_t *pData, uint16_t Size);
+void ISO14443AAppendCRCA(void* Buffer, uint16_t ByteCount);
+uint8_t ISO14443ACheckCRCA(void* Buffer, uint16_t ByteCount);
+uint8_t ISO14443ACheckLen(uint8_t* Buffer);
+extern void usart6_init(uint8_t *rx1_buf, uint8_t *rx2_buf, uint16_t dma_buf_num);
+void Bsp_UsartIdleHanlder(UART_HandleTypeDef *huart,uint16_t Size);
+void UART_Send_Buff(UART_HandleTypeDef *huart,Command command,uint8_t *data_input, uint8_t data_len);
+void UART_IdleRxCallback(UART_HandleTypeDef *huart);
+extern void usart1_tx_dma_init(void);
+extern void usart1_tx_dma_enable(uint8_t *data, uint16_t len);
+extern uint8_t PC_temp[50];
+extern uint8_t PC_send_data[10];
+extern void UI_Send_Buff(UART_HandleTypeDef *huart,uint8_t *data_input, uint8_t data_len);
+extern fp32 WT_gyro[3];
+extern fp32 WT_angle[3];
+#endif

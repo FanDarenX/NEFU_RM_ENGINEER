@@ -1,0 +1,36 @@
+#ifndef KF_H
+#define KF_H
+
+#include "stm32f407xx.h"
+#include "arm_math.h"
+#include "arm_math.h"
+#include "stdint.h"
+#include "stdlib.h"
+
+#define mat           arm_matrix_instance_f32//声明矩阵结构体
+#define mat_init      arm_mat_init_f32//初始化矩阵
+#define mat_add       arm_mat_add_f32//加
+#define mat_sub       arm_mat_sub_f32//减
+#define mat_mul       arm_mat_mult_f32//乘
+#define may_trans     arm_mat_trans_f32  //转置
+#define mat_scale     arm_mat_scale_f32//数乘
+#define mat_inv       arm_mat_inverse_f32//逆矩阵
+
+typedef struct
+{
+mat A;
+mat B;
+mat H;
+mat Q;
+mat R;
+mat X;
+mat X_hat;
+mat P;
+mat P_hat;
+mat K;
+	
+	
+}KalFil_t;
+
+
+#endif

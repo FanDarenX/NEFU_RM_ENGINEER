@@ -1,0 +1,93 @@
+<html>
+<body>
+<pre>
+<h1>礦ision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: μVision V5.34.0.0
+Copyright (C) 2021 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: 123 茶荣果, 123, LIC=9WSKC-7CBZQ-CXZU6-D19ES-0LQ2X-RDCUW
+ 
+Tool Versions:
+Toolchain:       MDK-ARM Plus  Version: 5.34.0.0
+Toolchain Path:  D:\Keil_v5\ARM\ARMCC\Bin
+C Compiler:      Armcc.exe V5.06 update 7 (build 960)
+Assembler:       Armasm.exe V5.06 update 7 (build 960)
+Linker/Locator:  ArmLink.exe V5.06 update 7 (build 960)
+Library Manager: ArmAr.exe V5.06 update 7 (build 960)
+Hex Converter:   FromElf.exe V5.06 update 7 (build 960)
+CPU DLL:         SARMCM3.DLL V5.34.0.0
+Dialog DLL:      DCM.DLL V1.17.3.0
+Target DLL:      Segger\JL2CM3.dll V2.99.42.0
+Dialog DLL:      TCM.DLL V1.48.0.0
+ 
+<h2>Project:</h2>
+E:\24-25赛季 RM\技术\平衡步兵\good\2024_5_11_Gimbal\Pawn1_gimbal\MDK-ARM\ins_task.uvprojx
+Project File Date:  09/22/2024
+
+<h2>Output:</h2>
+*** Using Compiler 'V5.06 update 7 (build 960)', folder: 'D:\Keil_v5\ARM\ARMCC\Bin'
+Build target 'ins_task'
+compiling gimbal_task.c...
+..\application\gimbal_task.h(353): warning:  #1295-D: Deprecated declaration red_linght_close - give arg types
+  void red_linght_close();
+..\application\gimbal_task.h(354): warning:  #1295-D: Deprecated declaration red_linght_open - give arg types
+  void red_linght_open();
+..\application\gimbal_task.h(355): warning:  #1295-D: Deprecated declaration BEEP_close - give arg types
+  void BEEP_close();
+..\application\gimbal_task.h(356): warning:  #1295-D: Deprecated declaration BEEP_open - give arg types
+  void BEEP_open();
+..\application\shoot.h(152): warning:  #1295-D: Deprecated declaration bullet_speed_get - give arg types
+  extern void bullet_speed_get();
+..\application\SolveTrajectory.h(88): warning:  #1-D: last line of file ends without a newline
+  //#endif /*__SOLVETRAJECTORY_H__*/
+..\application\gimbal_task.c(166): warning:  #177-D: variable "Pitch_speed_pid"  was declared but never referenced
+  	  static const fp32 Pitch_speed_pid[3]    = {PITCH_SPEED_PID_KP, PITCH_SPEED_PID_KI, PITCH_SPEED_PID_KD};
+..\application\gimbal_task.c(167): warning:  #177-D: variable "Yaw_speed_pid"  was declared but never referenced
+      static const fp32 Yaw_speed_pid[3]      = {YAW_SPEED_PID_KP, YAW_SPEED_PID_KI, YAW_SPEED_PID_KD};
+..\application\gimbal_task.c(305): warning:  #177-D: variable "num"  was declared but never referenced
+  	static uint16_t num=0;
+..\application\gimbal_task.c(306): warning:  #177-D: variable "gyro_num"  was declared but never referenced
+  	static uint16_t gyro_num=0;
+..\application\gimbal_task.c(308): warning:  #177-D: variable "common_temp"  was declared but never referenced
+  	static uint16_t protect_temp=0,side_temp=0,sit_temp=0,common_temp=0,stand_temp=0,remake_temp=0,mode_temp=0,jump_temp=0; 
+..\application\gimbal_task.c(309): warning:  #177-D: variable "gyro_temp"  was declared but never referenced
+  	fp32 gyro_temp=0;
+..\application\gimbal_task.c(790): warning:  #188-D: enumerated type mixed with another type
+  	HAL_GPIO_WritePin(RED_LIGHT_GPIO_Port,RED_LIGHT_Pin,0);
+..\application\gimbal_task.c(794): warning:  #188-D: enumerated type mixed with another type
+  	HAL_GPIO_WritePin(RED_LIGHT_GPIO_Port,RED_LIGHT_Pin,1);
+..\application\gimbal_task.c(770): warning:  #177-D: function "Matlab_Add_Pitch"  was declared but never referenced
+  static float Matlab_Add_Pitch(int distance)
+..\application\gimbal_task.c(668): warning:  #177-D: function "gimbal_PID_calc"  was declared but never referenced
+  static fp32 gimbal_PID_calc(gimbal_PID_t *pid, fp32 get, fp32 set,uint8_t type)
+..\application\gimbal_task.c: 16 warnings, 0 errors
+linking...
+Program Size: Code=83780 RO-data=4156 RW-data=2408 ZI-data=59448  
+FromELF: creating hex file...
+"ins_task\ins_task.axf" - 0 Error(s), 16 Warning(s).
+
+<h2>Software Packages used:</h2>
+
+Package Vendor: ARM
+                http://www.keil.com/pack/ARM.CMSIS.5.7.0.pack
+                ARM.CMSIS.5.7.0
+                CMSIS (Cortex Microcontroller Software Interface Standard)
+   * Component: CORE Version: 5.4.0
+
+Package Vendor: Keil
+                https://www.keil.com/pack/Keil.STM32F4xx_DFP.2.17.0.pack
+                Keil.STM32F4xx_DFP.2.17.0
+                STMicroelectronics STM32F4 Series Device Support, Drivers and Examples
+
+<h2>Collection of Component include folders:</h2>
+  .\RTE\_ins_task
+  D:\Keil_v5\ARM\CMSIS\5.7.0\CMSIS\Core\Include
+  D:\Keil_v5\Keil\STM32F4xx_DFP\2.17.0\Drivers\CMSIS\Device\ST\STM32F4xx\Include
+
+<h2>Collection of Component Files used:</h2>
+
+   * Component: ARM::CMSIS:CORE:5.4.0
+Build Time Elapsed:  00:00:05
+</pre>
+</body>
+</html>

@@ -1,0 +1,43 @@
+#include "oled_task.h"
+#include "oled.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "cmsis_os.h"
+#include "INS_task.h"
+#include "ANO_DT.h"
+#include "decet_task.h"
+#include "gimbal_task.h"
+void oled_task(void const * argument)
+{
+	/*****************开始等待一段时间****************/
+	vTaskDelay(OLED_TASK_INIT_TIME);
+  /****************初始化**************************/
+
+//	OLED_operate_gram(PEN_CLEAR);
+//	OLED_refresh_gram();
+//	OLED_printf(1, 0, "groy_x");
+//	OLED_printf(2, 0, "groy_y");
+//	OLED_printf(3, 0, "groy_z");
+	/****************************************/
+while (1)
+    {//100hz刷新
+        //显示内容分类
+//      OLED_mode();
+
+			OLED_printf(1, 10, "5.2f");
+			OLED_printf(2, 10, "5.2f");
+//			OLED_printf(3, 10, "%5.2f", get_imu_groy_z());
+			
+			OLED_refresh_gram();
+		//	decet_flag.oled_count++;
+        //os delay
+        //系统延时
+        vTaskDelay(OLED_REFRESH_TIME_MS);
+    }
+	
+}
+
+void  OLED_mode()
+{//显示内容
+	
+}

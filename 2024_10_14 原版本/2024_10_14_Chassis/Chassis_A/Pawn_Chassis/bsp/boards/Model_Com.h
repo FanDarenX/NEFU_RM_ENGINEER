@@ -1,0 +1,41 @@
+#include "stm32f407xx.h"
+#include "arm_math.h"
+#include "kalman_filter.h"
+#include "struct_typedef.h"
+#include "gimbal_task.h"
+typedef struct
+{
+    mat A;      		// ¶¯Ì¬¾ØÕó
+    mat B;          //
+    mat K;          //
+    mat G; 					// H¾ØÕó
+
+    mat u;
+    mat x;        //´«¸ÐÆ÷·µ»Ø×´Ì¬
+    mat x_x;        //´«¸ÐÆ÷·µ»Ø×´Ì¬
+    mat x0;        //Ô¤²â×´Ì¬
+    mat dx;       //¹Û²âÆ÷Êä³ö
+    mat delta_x;        //´«¸ÐÆ÷·µ»Ø×´Ì¬
+
+    mat temp_61;
+    mat temp_611;
+    mat temp_21;
+
+    fp32 A_data[36];
+    fp32 B_data[12];
+    fp32 G_data[6];
+    fp32 K_data[12];
+    fp32 x_data[6];
+    fp32 x_x_data[6];
+    fp32 delta_x_data[6];
+    fp32 x0_data[6];
+    fp32 dx_data[6];
+    fp32 u_data[2];
+    fp32 temp_61_data[6];
+    fp32 temp_611_data[6];
+    fp32 temp_21_data[2];
+
+} Model_t;
+
+extern void model_com_Init(Model_t* Model);
+extern void model_ref(Model_t* Model,chassis_control_t *chassis_control,uint8_t ce);

@@ -1,0 +1,102 @@
+/**
+ ******************************************************************************
+ * @file    ins_task.h
+ * @author  Wang Hongxi
+ * @version V2.0.0
+ * @date    2022/2/23
+ * @brief
+ ******************************************************************************
+ * @attention
+ *
+ ******************************************************************************
+ */
+#ifndef __INS_TASK_H
+#define __INS_TASK_H
+
+#include "stdint.h"
+#include "BMI088driver.h"
+#include "QuaternionEKF.h"
+#include "struct_typedef.h"
+#define X 0
+#define Y 1
+#define Z 2
+
+#define INS_TASK_PERIOD 1
+#define INS_YAW_ADDRESS_OFFSET    2
+#define INS_PITCH_ADDRESS_OFFSET  0
+#define INS_ROLL_ADDRESS_OFFSET   1
+
+#define INS_GYRO_X_ADDRESS_OFFSET 1
+#define INS_GYRO_Y_ADDRESS_OFFSET 0
+#define INS_GYRO_Z_ADDRESS_OFFSET 2
+
+#define INS_ACCEL_X_ADDRESS_OFFSET 0
+#define INS_ACCEL_Y_ADDRESS_OFFSET 1
+#define INS_ACCEL_Z_ADDRESS_OFFSET 2
+typedef struct
+{
+    float q[4]; // 四元数估计值
+
+    float Gyro[3];
+    float Accel[3];
+    float MotionAccel_b[3];
+    float MotionAccel_n[3];
+
+    float AccelLPF;
+
+    float xn[3];
+    float yn[3];
+    float zn[3];
+
+    float atanxz;
+    float atanyz;
+
+    float Roll;
+    float Pitch;
+    float Yaw;
+    float YawTotalAngle;
+} INS_t;
+
+typedef struct
+{
+    uint8_t flag;
+
+    float scale[3];
+
+    float Yaw;
+    float Pitch;
+    float Roll;
+} IMU_Param_t;
+
+typedef struct
+{
+    uint32_t main_Time;
+    uint32_t INS_Time;
+    uint16_t INS_delat_Time;
+
+    uint32_t USB_Time;
+    uint16_t INS_USB_delat_Time;
+
+} Time_t;
+
+extern INS_t INS;
+extern int16_t yaw_count;
+extern fp32 INS_gyro[3];       //euler angle, unit rad.欧拉角 单位 rad
+extern fp32 INS_angle[3];      //euler angle, unit rad.欧拉角 单位 rad
+extern Time_t Time;
+void INS_Init(void);
+void INS_Task(void const * argument);
+void IMU_Temperature_Ctrl(void);
+
+void QuaternionUpdate(float *q, float gx, float gy, float gz, float dt);
+void QuaternionToEularAngle(float *q, float *Yaw, float *Pitch, float *Roll);
+void EularAngleToQuaternion(float Yaw, float Pitch, float Roll, float *q);
+void BodyFrameToEarthFrame(const float *vecBF, float *vecEF, float *q);
+void EarthFrameToBodyFrame(const float *vecEF, float *vecBF, float *q);
+/**INS_angle的指针*/
+const fp32 *get_INS_angle_point(void);
+/**INS_gyro的指针*/
+extern const fp32 *get_gyro_data_point(void);
+extern const fp32 *get_acc_data_point(void);
+extern const fp32 *get_G_data_point(void);
+#endif

@@ -1,0 +1,3 @@
+#include "laser.h"
+
+void

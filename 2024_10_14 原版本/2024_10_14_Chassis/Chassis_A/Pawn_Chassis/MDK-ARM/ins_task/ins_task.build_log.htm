@@ -1,0 +1,93 @@
+<html>
+<body>
+<pre>
+<h1>礦ision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: μVision V5.34.0.0
+Copyright (C) 2021 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: 123 茶荣果, 123, LIC=9WSKC-7CBZQ-CXZU6-D19ES-0LQ2X-RDCUW
+ 
+Tool Versions:
+Toolchain:       MDK-ARM Plus  Version: 5.34.0.0
+Toolchain Path:  D:\Keil_v5\ARM\ARMCC\Bin
+C Compiler:      Armcc.exe V5.06 update 7 (build 960)
+Assembler:       Armasm.exe V5.06 update 7 (build 960)
+Linker/Locator:  ArmLink.exe V5.06 update 7 (build 960)
+Library Manager: ArmAr.exe V5.06 update 7 (build 960)
+Hex Converter:   FromElf.exe V5.06 update 7 (build 960)
+CPU DLL:         SARMCM3.DLL V5.34.0.0
+Dialog DLL:      DCM.DLL V1.17.3.0
+Target DLL:      Segger\JL2CM3.dll V2.99.42.0
+Dialog DLL:      TCM.DLL V1.48.0.0
+ 
+<h2>Project:</h2>
+E:\24-25赛季 RM\技术\平衡步兵\good\2024_5_19_Chassis\Chassis_A\Pawn_Chassis\MDK-ARM\ins_task.uvprojx
+Project File Date:  09/21/2024
+
+<h2>Output:</h2>
+*** Using Compiler 'V5.06 update 7 (build 960)', folder: 'D:\Keil_v5\ARM\ARMCC\Bin'
+Build target 'ins_task'
+compiling gimbal_task.c...
+..\bsp\boards\A1\motor_msg.h(162): warning:  #1-D: last line of file ends without a newline
+  #endif
+..\application\shoot.h(20): warning:  #47-D: incompatible redefinition of macro "HALF_ECD_RANGE"  (declared at line 32 of "..\application\gimbal_task.h")
+  #define HALF_ECD_RANGE              4096
+..\application\shoot.h(21): warning:  #47-D: incompatible redefinition of macro "ECD_RANGE"  (declared at line 33 of "..\application\gimbal_task.h")
+  #define ECD_RANGE                   8191
+..\application\shoot.h(149): warning:  #1295-D: Deprecated declaration bullet_speed_get - give arg types
+  extern void bullet_speed_get();
+../bsp/boards/bsp_usart.h(49): warning:  #47-D: incompatible redefinition of macro "PC_BUF_LEN"  (declared at line 26 of "..\application\remote_control.h")
+  #define PC_BUF_LEN    16
+../bsp/boards/Model_Com.h(41): warning:  #1-D: last line of file ends without a newline
+  extern void model_ref(Model_t* Model,chassis_control_t *chassis_control,uint8_t ce);
+..\application\gimbal_task.c(541): warning:  #177-D: variable "temp"  was declared but never referenced
+      fp32 temp;
+..\application\gimbal_task.c(542): warning:  #177-D: variable "distance_L_temp"  was declared but never referenced
+      static fp32 distance_L_temp,distance_R_temp;
+..\application\gimbal_task.c(542): warning:  #177-D: variable "distance_R_temp"  was declared but never referenced
+      static fp32 distance_L_temp,distance_R_temp;
+..\application\gimbal_task.c(686): warning:  #177-D: variable "temp"  was declared but never referenced
+      fp32 temp,r2l_temp;
+..\application\gimbal_task.c(686): warning:  #177-D: variable "r2l_temp"  was declared but never referenced
+      fp32 temp,r2l_temp;
+..\application\gimbal_task.c(689): warning:  #177-D: variable "vx_set_channel"  was declared but never referenced
+      fp32 vx_set_channel;
+..\application\gimbal_task.c(1272): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+          else if(ABS(accel - 9.8)< 0.1)// 正常状态
+..\application\gimbal_task.c(1272): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+          else if(ABS(accel - 9.8)< 0.1)// 正常状态
+..\application\gimbal_task.c(1272): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+          else if(ABS(accel - 9.8)< 0.1)// 正常状态
+..\application\gimbal_task.c(1278): warning:  #1035-D: single-precision operand implicitly converted to double-precision
+              F_feed = 80 + (9.8 - accel)*10;
+..\application\gimbal_task.c: 16 warnings, 0 errors
+linking...
+Program Size: Code=81856 RO-data=3524 RW-data=2168 ZI-data=58928  
+FromELF: creating hex file...
+"ins_task\ins_task.axf" - 0 Error(s), 16 Warning(s).
+
+<h2>Software Packages used:</h2>
+
+Package Vendor: ARM
+                http://www.keil.com/pack/ARM.CMSIS.5.7.0.pack
+                ARM.CMSIS.5.7.0
+                CMSIS (Cortex Microcontroller Software Interface Standard)
+   * Component: CORE Version: 5.4.0
+
+Package Vendor: Keil
+                https://www.keil.com/pack/Keil.STM32F4xx_DFP.2.17.0.pack
+                Keil.STM32F4xx_DFP.2.17.0
+                STMicroelectronics STM32F4 Series Device Support, Drivers and Examples
+
+<h2>Collection of Component include folders:</h2>
+  .\RTE\_ins_task
+  D:\Keil_v5\ARM\CMSIS\5.7.0\CMSIS\Core\Include
+  D:\Keil_v5\Keil\STM32F4xx_DFP\2.17.0\Drivers\CMSIS\Device\ST\STM32F4xx\Include
+
+<h2>Collection of Component Files used:</h2>
+
+   * Component: ARM::CMSIS:CORE:5.4.0
+Build Time Elapsed:  00:00:08
+</pre>
+</body>
+</html>

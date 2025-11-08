@@ -1,0 +1,103 @@
+#include "Model_Com.h"
+#include "kalman_filter.h"
+#include "arm_math.h"
+#include "struct_typedef.h"
+#include "user_lib.h"
+#include "gimbal_task.h"
+
+void model_com_Init(Model_t* Model)
+{
+	fp32 A[36]={0,1,0,0,0,0, \
+							265.9556f ,0 ,0, 0, 80.6327f, 0, \
+							0 ,0 ,0, 1 ,0, 0, 
+							-25.4562f ,0 ,0 ,0, 1.8637f ,0,
+							0 ,0 ,0 ,0 ,0 ,1, \
+							152.6952f, 0, 0, 0, 183.0614f ,0};
+	fp32 B[12]={0, 0,
+							-15.1839f,13.8563f,
+							0 ,0,
+							2.1208f,-0.7158f,
+							0, 0,
+							-4.228f, 16.8f};
+	fp32 K[12] = {45.0f,8.0f,18.0f,20.0f,29.0f,4.5f,  //Tk
+									3.584f,0.205f,2.56f,3.072f,102.4f,5.12f}; //Tf
+/*************************初始化矩阵**************************/
+	Matrix_Init(&Model->A,  6, 6, (float *)Model->A_data);
+  Matrix_Init(&Model->B,  6, 2, (float *)Model->B_data);
+	Matrix_Init(&Model->G,  6, 1, (float *)Model->G_data);
+	Matrix_Init(&Model->K,  2, 6, (float *)Model->K_data);
+	Matrix_Init(&Model->u, 2, 1, (float *)Model->u_data);
+	Matrix_Init(&Model->x,  6, 1, (float *)Model->x_data);
+	Matrix_Init(&Model->x_x,  6, 1, (float *)Model->x_x_data);
+	Matrix_Init(&Model->delta_x,  6, 1, (float *)Model->delta_x_data);
+	Matrix_Init(&Model->x0,  6, 1, (float *)Model->x0_data);
+	Matrix_Init(&Model->dx, 6, 1, (float *)Model->dx_data);
+	Matrix_Init(&Model->temp_61,  6, 1,(float *)Model->temp_61_data);
+	Matrix_Init(&Model->temp_611, 6, 1, (float *)Model->temp_611_data);
+	Matrix_Init(&Model->temp_21, 2, 1, (float *)Model->temp_21_data);													
+	/*********************转移矩阵装填******************************/
+	for(uint8_t i=0;i<36;i++)Model->A_data[i]=A[i];
+  for(uint8_t i=0;i<12;i++)Model->B_data[i]=B[i];
+	for(uint8_t i=0;i<12;i++)Model->K_data[i]=K[i];
+}
+
+void model_ref(Model_t* Model,chassis_control_t *chassis_control,uint8_t ce)
+{
+	//dx=Ax+B(u+Kx),u在这里暂时为0，视为全反馈
+	Matrix_Multiply(&Model->A,&Model->x,&Model->temp_61);
+	Matrix_Multiply(&Model->K,&Model->x_x,&Model->temp_21);//甚至不需要非线性化，我哭死
+	Matrix_Multiply(&Model->B,&Model->temp_21,&Model->temp_611);
+	Matrix_Add(&Model->temp_61,&Model->temp_611,&Model->dx);
+	Matrix_Scale(&Model->dx,0.002f,&Model->temp_611);//离散化积分
+	Matrix_Add(&Model->x,&Model->temp_611,&Model->x0);//dx积分到x上，这里是上一帧的状态变量x，加上dx以后就成了对当前的预测
+	
+	//更新状态变量
+	if(ce==0)
+	{
+		Model->x_data[0]	=PI_2-chassis_control->chassis_balance .leg_angle_L ;
+		Model->x_data[1]	=chassis_control->chassis_balance .leg_gyro_L ;
+		Model->x_data[2]	=chassis_control->foot_L_motor.distance;
+		Model->x_data[3]	=chassis_control->foot_L_motor.speed ;
+		Model->x_data[4]	=chassis_control->chassis_balance .pitch_angle;
+		Model->x_data[5]	=chassis_control->chassis_balance .pitch_gyro ;
+		
+		Model->x_x_data[0]	=PI_2-chassis_control->chassis_balance .leg_angle_L ;
+		Model->x_x_data[1]	=-chassis_control->chassis_balance .leg_gyro_L ;
+		Model->x_x_data[2]	=chassis_control->chassis_balance.foot_distance_L_set-chassis_control->foot_L_motor.distance;
+		Model->x_x_data[3]	=chassis_control->chassis_balance.foot_speed_L_set-chassis_control->foot_L_motor.speed ;
+		Model->x_x_data[4]	=-chassis_control->chassis_balance .pitch_angle;
+		Model->x_x_data[5]	=-chassis_control->chassis_balance .pitch_gyro ;
+		
+		Matrix_Subtract(&Model->x0,&Model->x,&Model->delta_x);//对实际值和估计值做差
+//		chassis_control->chassis_balance .leg_angle_L +=Model->delta_x_data[0];
+//		chassis_control->chassis_balance .leg_gyro_L  +=Model->delta_x_data[1];
+//		chassis_control->foot_L_motor.distance        +=Model->delta_x_data[2];
+//		chassis_control->foot_L_motor.speed           +=Model->delta_x_data[3];
+//		chassis_control->chassis_balance .pitch_angle +=Model->delta_x_data[4]*0.5f;
+//		chassis_control->chassis_balance .pitch_gyro  +=Model->delta_x_data[5]*0.5f;
+	}
+	else 
+	{
+		Model->x_data[0]	=PI_2-chassis_control->chassis_balance .leg_angle_R ;
+		Model->x_data[1]	=chassis_control->chassis_balance .leg_gyro_R ;
+		Model->x_data[2]	=chassis_control->foot_R_motor.distance;
+		Model->x_data[3]	=chassis_control->foot_R_motor.speed ;
+		Model->x_data[4]	=chassis_control->chassis_balance .pitch_angle;
+		Model->x_data[5]	=chassis_control->chassis_balance .pitch_gyro ;
+		
+		Model->x_x_data[0]	=PI_2-chassis_control->chassis_balance .leg_angle_R ;
+		Model->x_x_data[1]	=-chassis_control->chassis_balance .leg_gyro_R ;
+		Model->x_x_data[2]	=chassis_control->chassis_balance.foot_distance_R_set-chassis_control->foot_R_motor.distance;
+		Model->x_x_data[3]	=chassis_control->chassis_balance.foot_speed_R_set-chassis_control->foot_R_motor.speed ;
+		Model->x_x_data[4]	=-chassis_control->chassis_balance .pitch_angle;
+		Model->x_x_data[5]	=-chassis_control->chassis_balance .pitch_gyro ;
+		Matrix_Subtract(&Model->x0,&Model->x,&Model->delta_x);//对实际值和估计值做差
+//		chassis_control->chassis_balance .leg_angle_R +=Model->delta_x_data[0];
+//		chassis_control->chassis_balance .leg_gyro_R  +=Model->delta_x_data[1];
+//		chassis_control->foot_R_motor.distance        +=Model->delta_x_data[2];
+//		chassis_control->foot_R_motor.speed           +=Model->delta_x_data[3];
+//		chassis_control->chassis_balance .pitch_angle +=Model->delta_x_data[4]*0.5f;
+//		chassis_control->chassis_balance .pitch_gyro  +=Model->delta_x_data[5]*0.5f;
+	}
+	
+}
